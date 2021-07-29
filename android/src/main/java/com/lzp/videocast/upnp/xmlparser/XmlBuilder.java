@@ -16,7 +16,7 @@ import javax.xml.transform.stream.StreamResult;
 public class XmlBuilder {
 
     public static Document buildRequestActionEntity(String actionName, String serviceType, Map<String,String> arguments) throws Exception{
-         String namespace = "ns";
+         String namespace = "soap";
          Document document = newDocument(true);
 
          Element  nsEnvelope = document.createElement(xns(namespace,XmlCons.Envelope));
@@ -52,7 +52,7 @@ public class XmlBuilder {
             </nu:SetAVTransportURI>
      */
     private static Element buildActionElement(Document document, String actionName, String serviceType, Map<String,String> arguments) throws Exception {
-        String namespace = "nu";
+        String namespace = "st";
         // 构建action node
         // 示例: <nu:SetAVTransportURI xmlns:nu="#serviceType"> , serviceType => urn:schemas-upnp-org:service:AVTransport:1
         Element actionElement = document.createElement(xns(namespace,actionName));

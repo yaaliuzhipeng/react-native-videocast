@@ -33,12 +33,14 @@ public class SSDPCenter {
 
     public SSDPCenter (){}
 
-    public void initialize(Context ctx){
+    public SSDPCenter initialize(Context ctx){
         this.context = ctx;
+        return this;
     }
-    public void initialize(Context ctx,int scanTimeout){
+    public SSDPCenter initialize(Context ctx,int scanTimeout){
         this.context = ctx;
         scanTimeoutValue = scanTimeout;
+        return this;
     }
 
     private void getMultiLock(){
@@ -91,7 +93,8 @@ public class SSDPCenter {
                 DatagramPacket dp = multicastSocket.receive();
                 String resp = new String(dp.getData()).trim();
                 String fromhost = dp.getAddress().getHostAddress();
-                listener.onNewMessage(resp,fromhost);
+                int fromport = dp.getPort();
+                listener.onNewMessage(resp,fromhost,fromport);
             }
             multicastSocket.close();
             releaseMultiLock();

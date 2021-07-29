@@ -21,8 +21,12 @@ public class Downloader {
             while ((line = bufferedReader.readLine()) != null ){
                 builder.append(line);
             }
+            bufferedReader.close();
+            stream.close();
+            connection.disconnect();
             return builder.toString();
         }else{
+            connection.disconnect();
             return "";
         }
     }

@@ -35,7 +35,6 @@ public class UpnpConstants {
     public static int MulticastSocketPort = 1900;
 
 
-    //字符相关常量
     public static String SymNewLine = "\r\n";
     public static String SymSepa = ": ";
     public static String SymQuote = "\"";
@@ -44,4 +43,22 @@ public class UpnpConstants {
     public static String SymMX = "MX";
     public static String SymHOST = "HOST";
     public static String SymST = "ST";
+    public static String SymNT = "NT";
+    public static String SymLocation = "Location";
+
+    public static String AcGetCurrentTransportActions = "GetCurrentTransportActions";
+    public static String AcGetDeviceCapabilities = "GetDeviceCapabilities";
+    public static String AcGetMediaInfo = "GetMediaInfo";
+    public static String AcGetPositionInfo = "GetPositionInfo";
+    public static String AcGetTransportInfo = "GetTransportInfo";
+    public static String AcGetTransportSettings = "GetTransportSettings";
+    public static String AcNext = "Next";
+    public static String AcPause = "Pause";
+    public static String AcPlay = "Play";
+    public static String AcPrevious = "Previous";
+    public static String AcSeek = "Seek";
+    public static String AcSetAVTransportURI = "SetAVTransportURI";
+    public static String AcSetPlayMode = "SetPlayMode";
+    public static String AcStop = "Stop";
+
 }

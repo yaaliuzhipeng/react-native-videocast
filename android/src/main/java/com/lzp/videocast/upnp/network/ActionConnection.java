@@ -66,8 +66,8 @@ public class ActionConnection {
         }
         return this;
     }
-    public ActionConnection setSoapAction(String action) {
-        this.soapAction = action;
+    public ActionConnection setSoapAction(String serviceType,String action) {
+        this.soapAction = serviceType + "#" + action;
         return this;
     }
 

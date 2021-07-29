@@ -8,35 +8,64 @@ import java.util.Map;
 
 public class SSDPDataFactory {
     private static final String TAG = SSDPDataFactory.class.getSimpleName();
+
     /**
-     *  获取多播搜索信息实体
+     * 获取多播搜索信息实体
      */
     public static MulticastsocketSearchRequestEntity getMultisocketSearchRequestEntity(String st, Integer mx) {
-        return new MulticastsocketSearchRequestEntity(st,mx);
+        return new MulticastsocketSearchRequestEntity(st, mx);
     }
+
     public static MulticastsocketSearchRequestEntity getMultisocketSearchRequestEntity(String st) {
-        return new MulticastsocketSearchRequestEntity(st,5);
+        return new MulticastsocketSearchRequestEntity(st, 5);
     }
 
-    /**
-     * @Description 判断并解析 AVTransport搜索类型的响应数据
-     * 目标是 Server , Location , USN
-     */
-    public static Map<String, String> parseMulticastsocketReponse(String response) {
-        Map<String,String> resp = new HashMap<>();
-
+    public static FilteredMulticastsocketResponse filterMulticastsocketReponse(String response, String type) {
+        FilteredMulticastsocketResponse resp = new FilteredMulticastsocketResponse();
+        resp.setMatched(false);
         String[] segs = response.split("\n");
-        for (int i = 0; i < segs.length; i++){
-            String[] ss = segs[i].split(":");
-//            Log.i(TAG, "当前遍历seg => "+i+"  分割后首个元素是: "+ss[0]);
-            if(ss[0].trim().equalsIgnoreCase(UpnpConstants.MulticastSocketHeaderLOCATION)){
-                int firstSepIndex = segs[i].indexOf(":");
-                String location = segs[i].substring(firstSepIndex+1).trim();
-                resp.put(UpnpConstants.MulticastSocketHeaderLOCATION,location);
-                break;
+        for (String seg : segs) {
+            String[] ss = seg.split(":");
+            String key = ss[0].trim();
+            if (key.equalsIgnoreCase(UpnpConstants.SymNT) || key.equalsIgnoreCase(UpnpConstants.SymST)) {
+                //响应中包含 ST 或 NT字段; 获取字段值
+                int firstSepIndex = seg.indexOf(":");
+                String value = seg.substring(firstSepIndex + 1).trim();
+                if (value.equalsIgnoreCase(type)) {
+                    resp.setMatched(true);
+                }
+            }
+            if (key.equalsIgnoreCase(UpnpConstants.SymLocation)) {
+                int firstSepIndex = seg.indexOf(":");
+                String value = seg.substring(firstSepIndex + 1).trim();
+                resp.setLocation(value);
             }
         }
+        if(resp.isMatched() && resp.getLocation() == null) {
+            resp.setMatched(false);
+        }
         return resp;
+    }
+
+    public static class FilteredMulticastsocketResponse {
+        private boolean matched;
+        private String location;
+
+        public boolean isMatched() {
+            return matched;
+        }
+
+        public void setMatched(boolean matched) {
+            this.matched = matched;
+        }
+
+        public String getLocation() {
+            return location;
+        }
+
+        public void setLocation(String location) {
+            this.location = location;
+        }
     }
 
 }
