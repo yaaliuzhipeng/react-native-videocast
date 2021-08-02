@@ -2,7 +2,9 @@
 
 package com.lzp.videocast;
 
+import android.annotation.SuppressLint;
 import android.os.AsyncTask;
+import android.util.AndroidRuntimeException;
 import android.util.Log;
 
 import com.facebook.react.bridge.Arguments;
@@ -91,113 +93,8 @@ public class ReactNativeVideocastModule extends ReactContextBaseJavaModule {
     @ReactMethod
     public void setCurrentURI(String uuid, String uri, Callback onSuccess, Callback onError) {
         Log.i("TAG", "执行 setCurrentURI");
-        SSDPDeviceResponse ssdpDeviceResponse = null;
-        for (SSDPDeviceResponse dr : deviceResponses) {
-            if (dr.getUuid().equals(uuid)) {
-                choosedUUID = uuid;
-                ssdpDeviceResponse = dr;
-            }
-        }
-        if (ssdpDeviceResponse == null) {
-            WritableMap errMap = Arguments.createMap();
-            errMap.putString("message", "设备已过期、请重新扫描并选取设备");
-            return;
-        }
-        String rootURl = "";
-        try {
-            URL location = new URL(ssdpDeviceResponse.getLocation());
-            rootURl = location.getProtocol() + "://" + location.getHost() + ":" + location.getPort();
-        } catch (MalformedURLException e) {
-            e.printStackTrace();
-        }
-        Log.i("TAG", "setCurrentURI: 根地址: " + rootURl + "   播放链接是: " + uri);
-        XmlDeviceDescriptionDocument ddd = ssdpDeviceResponse.getDescriptionDocument();
-
-        XmlDeviceService deviceService = null;
-        for (XmlDeviceService service : ddd.getDevice().getServiceList()) {
-            if (service.getServiceType().equalsIgnoreCase(UpnpConstants.TypeServerKind.UpnpAVTransport1)) {
-                //找到 UpnpAVTransport1 服务
-                deviceService = service;
-                break;
-            }
-        }
-        if (deviceService == null) {
-            WritableMap errMap = Arguments.createMap();
-            errMap.putString("message", "该设备暂不支持投屏、请选择其他可用设备");
-            return;
-        }
-
-        serviceType = deviceService.getServiceType();
-        //下载并解析 scpd 文档
-        String scpdURL = joinRootAndFileAddress(rootURl,deviceService.getSCPDURL());
-        String scpdContent = "";
-        try {
-            Log.i(TAG, "setCurrentURI: 开始下载 SCPD 文档");
-            scpdContent = Downloader.downloadXml(scpdURL);
-            scpdDocument = XmlParser.parseScpdDocument(scpdContent);
-            ArrayList<XmlAction> actions = scpdDocument.getActionList();
-
-            Log.i(TAG, "setCurrentURI: SCPD文档下载完成");
-            //找到名为 SetAVTransportURI 的 action
-            XmlAction action = null;
-            for (XmlAction act : actions) {
-                if (act.getName().equalsIgnoreCase(UpnpConstants.AcSetAVTransportURI)) {
-                    action = act;
-                }
-            }
-            if (action == null) {
-                WritableMap errMap = Arguments.createMap();
-                errMap.putString("message", "该设备暂不支持投屏、请选择其他可用设备");
-                return;
-            }
-            //构建SOAPMessage
-            HashMap<String, String> arugments = new HashMap<>();
-            Random random = new Random(50);
-            instanceID = random.nextInt(50);
-            arugments.put("InstanceID", String.valueOf(instanceID));
-            arugments.put("CurrentURI", uri);
-            arugments.put("CurrentURIMetaData", "");
-            String soapMessage = XmlBuilder.convertToString(XmlBuilder.buildRequestActionEntity(
-                    action.getName(),
-                    deviceService.getServiceType(),
-                    arugments));
-            Log.i("TAG", "setCurrentURI: action body => \n" + soapMessage);
-
-            //构造control url
-            controlConnectionURL = joinRootAndFileAddress(rootURl, deviceService.getControlURL());
-
-            HttpURLConnection httpURLConnection = new ActionConnection()
-                    .setUrl(controlConnectionURL)
-                    .setRequestMethod(ActionConnection.HTTP_POST)
-                    .setSoapAction(deviceService.getServiceType(), action.getName())
-                    .build();
-            OutputStream outputStream = httpURLConnection.getOutputStream();
-            outputStream.write(soapMessage.getBytes());
-            outputStream.flush();
-            outputStream.close();
-
-            int code = httpURLConnection.getResponseCode();
-            InputStream inputStream = httpURLConnection.getInputStream();
-            BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-            String line = "";
-            StringBuilder builder = new StringBuilder();
-            while ( (line = reader.readLine()) != null) {
-                builder.append(line);
-            }
-            if (code == HttpURLConnection.HTTP_OK) {
-                Log.i("TAG", "setCurrentURI 响应成功 => \n"+builder.toString());
-                onSuccess.invoke("响应成功");
-            }else{
-                onError.invoke("响应失败 => \n"+builder.toString());
-            }
-            reader.close();
-            inputStream.close();
-            httpURLConnection.disconnect();
-        } catch (Exception e) {
-            WritableMap errMap = Arguments.createMap();
-            errMap.putString("message", "投屏失败、请选择其他可用设备");
-            return;
-        }
+        AsyncSetCurrentURITask task = new AsyncSetCurrentURITask(uuid,uri,onSuccess,onError);
+        task.execute();
     }
 
     // play ,pause , next ,previous
@@ -250,8 +147,11 @@ public class ReactNativeVideocastModule extends ReactContextBaseJavaModule {
                 Log.i("TAG", "action: "+action.getName()+" 响应成功 => \n"+builder.toString());
                 onSuccess.invoke("响应成功");
             }else{
-                Log.i("TAG", "action 响应是吧 => \n"+builder.toString());
-                onError.invoke("响应失败 => \n"+builder.toString());
+                Log.i("TAG", "action 响应失败 => \n"+builder.toString());
+                //TODO: add error parser
+                WritableMap errMap = Arguments.createMap();
+                errMap.putString("message", "请求失败");
+                onError.invoke(errMap);
             }
             reader.close();
             inputStream.close();
@@ -260,34 +160,38 @@ public class ReactNativeVideocastModule extends ReactContextBaseJavaModule {
             Log.e("TAG", "runSimpleAction: "+e.toString() );
             WritableMap errMap = Arguments.createMap();
             errMap.putString("message", e.toString());
+            onError.invoke(errMap);
         }
     }
 
     @ReactMethod
     public void play(String uuid,Callback onSuccess,Callback onError){
-        Log.i("TAG", "执行 play");
         HashMap<String, String> arguments = new HashMap<>();
         arguments.put("InstanceID", String.valueOf(instanceID));
         arguments.put("Speed", "1");
-        runSimpleAction(UpnpConstants.AcPlay,arguments, uuid,onSuccess,onError);
+        AsyncAction task = new AsyncAction(arguments,uuid,UpnpConstants.AcPlay,onSuccess,onError);
+        task.execute();
     }
     @ReactMethod
     public void pause(String uuid,Callback onSuccess,Callback onError){
         HashMap<String, String> arguments = new HashMap<>();
         arguments.put("InstanceID", String.valueOf(instanceID));
-        runSimpleAction(UpnpConstants.AcPause,arguments, uuid,onSuccess,onError);
+        AsyncAction task = new AsyncAction(arguments,uuid,UpnpConstants.AcPause,onSuccess,onError);
+        task.execute();
     }
     @ReactMethod
     public void next(String uuid,Callback onSuccess,Callback onError){
         HashMap<String, String> arguments = new HashMap<>();
         arguments.put("InstanceID", String.valueOf(instanceID));
-        runSimpleAction(UpnpConstants.AcNext,arguments, uuid,onSuccess,onError);
+        AsyncAction task = new AsyncAction(arguments,uuid,UpnpConstants.AcNext,onSuccess,onError);
+        task.execute();
     }
     @ReactMethod
     public void previous(String uuid,Callback onSuccess,Callback onError){
         HashMap<String, String> arguments = new HashMap<>();
         arguments.put("InstanceID", String.valueOf(instanceID));
-        runSimpleAction(UpnpConstants.AcPrevious,arguments, uuid,onSuccess,onError);
+        AsyncAction task = new AsyncAction(arguments,uuid,UpnpConstants.AcPrevious,onSuccess,onError);
+        task.execute();
     }
 
     //异步扫描任务
@@ -348,7 +252,9 @@ public class ReactNativeVideocastModule extends ReactContextBaseJavaModule {
                                         }
                                     } catch (Exception e) {
                                         e.printStackTrace();
-                                        //TODO: download failed
+                                        WritableMap errMap = Arguments.createMap();
+                                        errMap.putString("message","设备描述文档下载失败");
+                                        onError.invoke();
                                     }
                                 }
                             }
@@ -385,32 +291,158 @@ public class ReactNativeVideocastModule extends ReactContextBaseJavaModule {
             }
         }
     }
-
     //异步SetCurrentURI任务
     private static class AsyncSetCurrentURITask extends AsyncTask<Integer, Void, String> {
+
+        private final String uuid;
+        private final String uri;
+        private final Callback onSuccess;
+        private final Callback onError;
+
+        public AsyncSetCurrentURITask(String uuid,String uri, Callback onSuccess, Callback onError){
+            this.uuid = uuid;
+            this.uri = uri;
+            this.onSuccess = onSuccess;
+            this.onError = onError;
+        }
+
         @Override
         protected String doInBackground(Integer... integers) {
+            SSDPDeviceResponse ssdpDeviceResponse = null;
+            for (SSDPDeviceResponse dr : deviceResponses) {
+                if (dr.getUuid().equals(this.uuid)) {
+                    choosedUUID = this.uuid;
+                    ssdpDeviceResponse = dr;
+                }
+            }
+            if (ssdpDeviceResponse == null) {
+                WritableMap errMap = Arguments.createMap();
+                errMap.putString("message", "设备已过期、请重新扫描并选取设备");
+                onError.invoke(errMap);
+                return null;
+            }
+            String rootURl = "";
+            try {
+                URL location = new URL(ssdpDeviceResponse.getLocation());
+                rootURl = location.getProtocol() + "://" + location.getHost() + ":" + location.getPort();
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            }
+            Log.i("TAG", "setCurrentURI: 根地址: " + rootURl + "   播放链接是: " + uri);
+            XmlDeviceDescriptionDocument ddd = ssdpDeviceResponse.getDescriptionDocument();
+
+            XmlDeviceService deviceService = null;
+            for (XmlDeviceService service : ddd.getDevice().getServiceList()) {
+                if (service.getServiceType().equalsIgnoreCase(UpnpConstants.TypeServerKind.UpnpAVTransport1)) {
+                    //找到 UpnpAVTransport1 服务
+                    deviceService = service;
+                    break;
+                }
+            }
+            if (deviceService == null) {
+                WritableMap errMap = Arguments.createMap();
+                errMap.putString("message", "该设备暂不支持投屏、请选择其他可用设备");
+                onError.invoke(errMap);
+                return null;
+            }
+
+            serviceType = deviceService.getServiceType();
+            //下载并解析 scpd 文档
+            String scpdURL = joinRootAndFileAddress(rootURl,deviceService.getSCPDURL());
+            String scpdContent = "";
+            try {
+                Log.i(TAG, "setCurrentURI: 开始下载 SCPD 文档");
+                scpdContent = Downloader.downloadXml(scpdURL);
+                scpdDocument = XmlParser.parseScpdDocument(scpdContent);
+                ArrayList<XmlAction> actions = scpdDocument.getActionList();
+
+                Log.i(TAG, "setCurrentURI: SCPD文档下载完成");
+                //找到名为 SetAVTransportURI 的 action
+                XmlAction action = null;
+                for (XmlAction act : actions) {
+                    if (act.getName().equalsIgnoreCase(UpnpConstants.AcSetAVTransportURI)) {
+                        action = act;
+                    }
+                }
+                if (action == null) {
+                    WritableMap errMap = Arguments.createMap();
+                    errMap.putString("message", "该设备暂不支持投屏、请选择其他可用设备");
+                    onError.invoke(errMap);
+                    return null;
+                }
+                //构建SOAPMessage
+                HashMap<String, String> arugments = new HashMap<>();
+                Random random = new Random(50);
+                instanceID = random.nextInt(50);
+                arugments.put("InstanceID", String.valueOf(instanceID));
+                arugments.put("CurrentURI", uri);
+                arugments.put("CurrentURIMetaData", "");
+                String soapMessage = XmlBuilder.convertToString(XmlBuilder.buildRequestActionEntity(
+                        action.getName(),
+                        deviceService.getServiceType(),
+                        arugments));
+                Log.i("TAG", "setCurrentURI: action body => \n" + soapMessage);
+                //构造control url
+                controlConnectionURL = joinRootAndFileAddress(rootURl, deviceService.getControlURL());
+
+                HttpURLConnection httpURLConnection = new ActionConnection()
+                        .setUrl(controlConnectionURL)
+                        .setRequestMethod(ActionConnection.HTTP_POST)
+                        .setSoapAction(deviceService.getServiceType(), action.getName())
+                        .build();
+                OutputStream outputStream = httpURLConnection.getOutputStream();
+                outputStream.write(soapMessage.getBytes());
+                outputStream.flush();
+                outputStream.close();
+
+                int code = httpURLConnection.getResponseCode();
+                InputStream inputStream = httpURLConnection.getInputStream();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
+                String line = "";
+                StringBuilder builder = new StringBuilder();
+                while ( (line = reader.readLine()) != null) {
+                    builder.append(line);
+                }
+                reader.close();
+                inputStream.close();
+                httpURLConnection.disconnect();
+                if (code == HttpURLConnection.HTTP_OK) {
+                    Log.i("TAG", "setCurrentURI 响应成功 => \n"+builder.toString());
+                    onSuccess.invoke("响应成功");
+                    return null;
+                }else{
+                    WritableMap errMap = Arguments.createMap();
+                    errMap.putString("message", "响应失败");
+                    onError.invoke(errMap);
+                    return null;
+                }
+            } catch (Exception e) {
+                WritableMap errMap = Arguments.createMap();
+                errMap.putString("message", "投屏失败、请选择其他可用设备");
+                onError.invoke(errMap);
+            }
             return null;
         }
     }
     //异步play任务
-    private static class AsyncPlay extends AsyncTask<Integer,Void,String> {
-        @Override
-        protected String doInBackground(Integer... integers) {
-            return null;
+    @SuppressLint("StaticFieldLeak")
+    private class AsyncAction extends AsyncTask<Integer,Void,String> {
+        private final Callback onSuccess;
+        private final Callback onError;
+        private final HashMap<String, String> arguments;
+        private final String uuid;
+        private final String action;
+
+        public AsyncAction(HashMap<String, String> arguments,String uuid,String action,Callback onSuccess,Callback onError){
+            this.arguments = arguments;
+            this.onSuccess = onSuccess;
+            this.onError = onError;
+            this.uuid = uuid;
+            this.action = action;
         }
-    }
-    //异步pause任务
-    private static class AsyncPause extends AsyncTask<Integer,Void,String> {
         @Override
         protected String doInBackground(Integer... integers) {
-            return null;
-        }
-    }
-    //异步next任务
-    private static class AsyncNext extends AsyncTask<Integer,Void,String> {
-        @Override
-        protected String doInBackground(Integer... integers) {
+            runSimpleAction(this.action,this.arguments, this.uuid,this.onSuccess,this.onError);
             return null;
         }
     }
