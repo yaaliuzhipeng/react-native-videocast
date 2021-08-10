@@ -3,7 +3,7 @@
   "title": "Videocast",
   "version": "1.0.0",
   "description": "TODO",
-  "main": "index.js",
+  "main": "./libs/index.js",
   "files": [
     "README.md",
     "android",
