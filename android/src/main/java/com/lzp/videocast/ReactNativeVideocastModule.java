@@ -4,6 +4,7 @@ package com.lzp.videocast;
 
 import android.annotation.SuppressLint;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.util.AndroidRuntimeException;
 import android.util.Log;
 
@@ -94,7 +95,7 @@ public class ReactNativeVideocastModule extends ReactContextBaseJavaModule {
     public void setCurrentURI(String uuid, String uri, Callback onSuccess, Callback onError) {
         Log.i("TAG", "执行 setCurrentURI");
         AsyncSetCurrentURITask task = new AsyncSetCurrentURITask(uuid,uri,onSuccess,onError);
-        task.execute();
+        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     // play ,pause , next ,previous
@@ -170,28 +171,28 @@ public class ReactNativeVideocastModule extends ReactContextBaseJavaModule {
         arguments.put("InstanceID", String.valueOf(instanceID));
         arguments.put("Speed", "1");
         AsyncAction task = new AsyncAction(arguments,uuid,UpnpConstants.AcPlay,onSuccess,onError);
-        task.execute();
+        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
     @ReactMethod
     public void pause(String uuid,Callback onSuccess,Callback onError){
         HashMap<String, String> arguments = new HashMap<>();
         arguments.put("InstanceID", String.valueOf(instanceID));
         AsyncAction task = new AsyncAction(arguments,uuid,UpnpConstants.AcPause,onSuccess,onError);
-        task.execute();
+        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
     @ReactMethod
     public void next(String uuid,Callback onSuccess,Callback onError){
         HashMap<String, String> arguments = new HashMap<>();
         arguments.put("InstanceID", String.valueOf(instanceID));
         AsyncAction task = new AsyncAction(arguments,uuid,UpnpConstants.AcNext,onSuccess,onError);
-        task.execute();
+        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
     @ReactMethod
     public void previous(String uuid,Callback onSuccess,Callback onError){
         HashMap<String, String> arguments = new HashMap<>();
         arguments.put("InstanceID", String.valueOf(instanceID));
         AsyncAction task = new AsyncAction(arguments,uuid,UpnpConstants.AcPrevious,onSuccess,onError);
-        task.execute();
+        task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     //异步扫描任务
