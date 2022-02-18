@@ -56,8 +56,8 @@ public class UpnpConstants {
     public static String AcPause = "Pause";
     public static String AcPlay = "Play";
     public static String AcPrevious = "Previous";
-    public static String AcSeek = "Seek";
     public static String AcSetAVTransportURI = "SetAVTransportURI";
+    public static String AcSeek = "Seek";
     public static String AcSetPlayMode = "SetPlayMode";
     public static String AcStop = "Stop";
 
